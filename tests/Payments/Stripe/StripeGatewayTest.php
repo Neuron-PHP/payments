@@ -115,6 +115,56 @@ class StripeGatewayTest extends TestCase
 		$gateway->verifyWebhook( '{}', 't=1,v1=abc' );
 	}
 
+	public function testVerifyWebhookDecodesInvoiceRenewal(): void
+	{
+		$payload = json_encode( [
+			'type' => WebhookEvent::INVOICE_PAID,
+			'data' => [ 'object' => [
+				'id'             => 'in_123',
+				'subscription'   => 'sub_456',
+				'amount_paid'    => 2500,
+				'billing_reason' => 'subscription_cycle'
+			] ]
+		] );
+
+		$event = $this->gateway()->verifyWebhook( $payload, $this->signature( $payload ) );
+
+		$this->assertTrue( $event->isInvoicePaid() );
+		$this->assertTrue( $event->isRenewal() );
+		$this->assertSame( 'sub_456', $event->subscriptionId() );
+		$this->assertSame( 2500, $event->amountPaid() );
+	}
+
+	public function testSubscriptionFromStripeMapsArray(): void
+	{
+		$subscription = $this->gateway()->subscriptionFromStripe( [
+			'id'                 => 'sub_1',
+			'status'             => 'active',
+			'current_period_end' => 1750000000,
+			'canceled_at'        => null,
+			'metadata'           => [ 'payment_id' => '7' ]
+		] );
+
+		$this->assertSame( 'sub_1', $subscription->id );
+		$this->assertTrue( $subscription->isActive() );
+		$this->assertFalse( $subscription->isCanceled() );
+		$this->assertSame( 1750000000, $subscription->currentPeriodEnd );
+		$this->assertSame( '7', $subscription->metadata['payment_id'] );
+	}
+
+	public function testSubscriptionFromStripeMapsCanceled(): void
+	{
+		$subscription = $this->gateway()->subscriptionFromStripe( [
+			'id'          => 'sub_2',
+			'status'      => 'canceled',
+			'canceled_at' => 1750000000
+		] );
+
+		$this->assertTrue( $subscription->isCanceled() );
+		$this->assertFalse( $subscription->isActive() );
+		$this->assertSame( 1750000000, $subscription->canceledAt );
+	}
+
 	private function signature( string $payload, ?int $timestamp = null ): string
 	{
 		$timestamp ??= time();

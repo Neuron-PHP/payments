@@ -5,6 +5,7 @@ namespace Neuron\Payments\Stripe;
 use Neuron\Payments\Dto\CheckoutSession;
 use Neuron\Payments\Dto\CheckoutSessionRequest;
 use Neuron\Payments\Dto\Refund;
+use Neuron\Payments\Dto\Subscription;
 use Neuron\Payments\Dto\WebhookEvent;
 use Neuron\Payments\Exceptions\PaymentException;
 use Neuron\Payments\IPaymentGateway;
@@ -163,6 +164,87 @@ class StripeGateway implements IPaymentGateway
 		}
 
 		return new Refund( (string) $refund->id, (string) ( $refund->status ?? 'unknown' ) );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getSubscription( string $subscriptionId ): Subscription
+	{
+		try
+		{
+			$subscription = $this->client()->subscriptions->retrieve( $subscriptionId );
+		}
+		catch( \Throwable $e )
+		{
+			throw new PaymentException( 'Unable to retrieve Stripe subscription: ' . $e->getMessage(), 0, $e );
+		}
+
+		return $this->subscriptionFromStripe( $subscription );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function cancelSubscription( string $subscriptionId, bool $atPeriodEnd = false ): Subscription
+	{
+		try
+		{
+			if( $atPeriodEnd )
+			{
+				$subscription = $this->client()->subscriptions->update(
+					$subscriptionId,
+					[ 'cancel_at_period_end' => true ]
+				);
+			}
+			else
+			{
+				$subscription = $this->client()->subscriptions->cancel( $subscriptionId );
+			}
+		}
+		catch( \Throwable $e )
+		{
+			throw new PaymentException( 'Unable to cancel Stripe subscription: ' . $e->getMessage(), 0, $e );
+		}
+
+		return $this->subscriptionFromStripe( $subscription );
+	}
+
+	/**
+	 * Map a Stripe subscription object ( SDK object or array ) to a Subscription DTO.
+	 *
+	 * @param mixed $subscription
+	 * @return Subscription
+	 */
+	public function subscriptionFromStripe( mixed $subscription ): Subscription
+	{
+		$get = static function( string $key ) use ( $subscription )
+		{
+			if( is_array( $subscription ) )
+			{
+				return $subscription[ $key ] ?? null;
+			}
+
+			return $subscription->$key ?? null;
+		};
+
+		$metadata = $get( 'metadata' );
+
+		if( $metadata !== null && !is_array( $metadata ) && method_exists( $metadata, 'toArray' ) )
+		{
+			$metadata = $metadata->toArray();
+		}
+
+		$periodEnd  = $get( 'current_period_end' );
+		$canceledAt = $get( 'canceled_at' );
+
+		return new Subscription(
+			id:               (string) ( $get( 'id' ) ?? '' ),
+			status:           (string) ( $get( 'status' ) ?? 'unknown' ),
+			currentPeriodEnd: $periodEnd === null ? null : (int) $periodEnd,
+			canceledAt:       $canceledAt === null ? null : (int) $canceledAt,
+			metadata:         is_array( $metadata ) ? $metadata : []
+		);
 	}
 
 	/**
