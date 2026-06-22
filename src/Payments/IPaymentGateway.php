@@ -5,6 +5,7 @@ namespace Neuron\Payments;
 use Neuron\Payments\Dto\CheckoutSession;
 use Neuron\Payments\Dto\CheckoutSessionRequest;
 use Neuron\Payments\Dto\Refund;
+use Neuron\Payments\Dto\Subscription;
 use Neuron\Payments\Dto\WebhookEvent;
 use Neuron\Payments\Exceptions\PaymentException;
 
@@ -45,4 +46,24 @@ interface IPaymentGateway
 	 * @throws PaymentException When the refund fails.
 	 */
 	public function refund( string $paymentIntentId ): Refund;
+
+	/**
+	 * Retrieve the current state of a subscription.
+	 *
+	 * @param string $subscriptionId
+	 * @return Subscription
+	 * @throws PaymentException When the subscription cannot be retrieved.
+	 */
+	public function getSubscription( string $subscriptionId ): Subscription;
+
+	/**
+	 * Cancel a subscription, ending its recurring billing.
+	 *
+	 * @param string $subscriptionId
+	 * @param bool $atPeriodEnd When true, cancel at the end of the current
+	 *                          billing period instead of immediately.
+	 * @return Subscription The subscription's resulting state.
+	 * @throws PaymentException When the cancellation fails.
+	 */
+	public function cancelSubscription( string $subscriptionId, bool $atPeriodEnd = false ): Subscription;
 }
