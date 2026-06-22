@@ -1,1 +1,1 @@
-* First version.
+* First version, includes payments and donations.
