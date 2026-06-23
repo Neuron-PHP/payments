@@ -1,4 +1,6 @@
-## 0.2.1
+## 0.3.0
+
+* Adds items, catalog, and cart.
 
 ## 0.2.0 2026-06-22
 

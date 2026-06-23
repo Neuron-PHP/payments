@@ -4,6 +4,7 @@ namespace Tests\Payments\Stripe;
 
 use Neuron\Payments\Dto\CheckoutSessionRequest;
 use Neuron\Payments\Dto\Frequency;
+use Neuron\Payments\Dto\LineItem;
 use Neuron\Payments\Dto\Money;
 use Neuron\Payments\Dto\WebhookEvent;
 use Neuron\Payments\Exceptions\PaymentException;
@@ -58,6 +59,50 @@ class StripeGatewayTest extends TestCase
 
 		$this->assertSame( '7', $params['subscription_data']['metadata']['donation_id'] );
 		$this->assertSame( 'quarterly', $params['subscription_data']['metadata']['frequency'] );
+	}
+
+	public function testBuildSessionParamsCartLineItems(): void
+	{
+		$request = new CheckoutSessionRequest(
+			amount:      new Money( 4500, 'usd' ),
+			frequency:   Frequency::OneTime,
+			successUrl:  'https://example.org/success',
+			cancelUrl:   'https://example.org/cancel',
+			productName: 'Order',
+			metadata:    [ 'payment_id' => 12 ],
+			lineItems:   [
+				new LineItem( 'T-Shirt', new Money( 2000, 'usd' ), 2 ),
+				new LineItem( 'Sticker', new Money( 500, 'usd' ), 1 )
+			]
+		);
+
+		$params = $this->gateway()->buildSessionParams( $request );
+
+		$this->assertSame( 'payment', $params['mode'] );
+		$this->assertCount( 2, $params['line_items'] );
+		$this->assertSame( 'T-Shirt', $params['line_items'][0]['price_data']['product_data']['name'] );
+		$this->assertSame( 2000, $params['line_items'][0]['price_data']['unit_amount'] );
+		$this->assertSame( 2, $params['line_items'][0]['quantity'] );
+		$this->assertSame( 500, $params['line_items'][1]['price_data']['unit_amount'] );
+		$this->assertSame( '12', $params['metadata']['payment_id'] );
+	}
+
+	public function testBuildSessionParamsCartIsOneTimeEvenWhenRecurringRequested(): void
+	{
+		$request = new CheckoutSessionRequest(
+			amount:    new Money( 2000, 'usd' ),
+			frequency: Frequency::Monthly,
+			successUrl: 'https://example.org/success',
+			cancelUrl:  'https://example.org/cancel',
+			lineItems:  [ new LineItem( 'Mug', new Money( 2000, 'usd' ), 1 ) ]
+		);
+
+		$params = $this->gateway()->buildSessionParams( $request );
+
+		$this->assertSame( 'payment', $params['mode'] );
+		$this->assertArrayNotHasKey( 'subscription_data', $params );
+		$this->assertArrayNotHasKey( 'recurring', $params['line_items'][0]['price_data'] );
+		$this->assertSame( 'one_time', $params['metadata']['frequency'] );
 	}
 
 	public function testVerifyWebhookAcceptsValidSignature(): void
