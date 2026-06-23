@@ -41,6 +41,30 @@ $session = $gateway->createCheckoutSession( new CheckoutSessionRequest(
 header( 'Location: ' . $session->url );
 ```
 
+### Cart / multi-item checkout
+
+For a shopping-cart purchase, pass `lineItems` instead of relying on the single
+`amount`. Each `LineItem` has a name, a unit price, and a quantity, and the
+gateway charges them as separate lines on one hosted checkout. Cart checkout is
+always one-time ( any recurring `frequency` is ignored when line items are
+present ).
+
+```php
+use Neuron\Payments\Dto\LineItem;
+
+$session = $gateway->createCheckoutSession( new CheckoutSessionRequest(
+    amount:     Money::fromMajorUnits( 45.00 ), // convenience total only
+    frequency:  Frequency::OneTime,
+    successUrl: 'https://example.org/store/success?session_id={CHECKOUT_SESSION_ID}',
+    cancelUrl:  'https://example.org/store/cancel',
+    metadata:   [ 'payment_id' => 123 ],
+    lineItems:  [
+        new LineItem( 'T-Shirt', Money::fromMajorUnits( 20.00 ), 2 ),
+        new LineItem( 'Sticker', Money::fromMajorUnits( 5.00 ), 1 ),
+    ]
+) );
+```
+
 ### Webhooks
 
 `verifyWebhook()` returns a gateway-agnostic `WebhookEvent` that covers the full

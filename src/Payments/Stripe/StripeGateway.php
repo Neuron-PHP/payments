@@ -4,6 +4,8 @@ namespace Neuron\Payments\Stripe;
 
 use Neuron\Payments\Dto\CheckoutSession;
 use Neuron\Payments\Dto\CheckoutSessionRequest;
+use Neuron\Payments\Dto\Frequency;
+use Neuron\Payments\Dto\LineItem;
 use Neuron\Payments\Dto\Refund;
 use Neuron\Payments\Dto\Subscription;
 use Neuron\Payments\Dto\WebhookEvent;
@@ -73,21 +75,8 @@ class StripeGateway implements IPaymentGateway
 	 */
 	public function buildSessionParams( CheckoutSessionRequest $request ): array
 	{
-		$recurring = $request->frequency->isRecurring();
-
-		$priceData = [
-			'currency'     => $request->amount->currency,
-			'unit_amount'  => $request->amount->amount,
-			'product_data' => [ 'name' => $request->productName ]
-		];
-
-		if( $recurring )
-		{
-			$priceData['recurring'] = [
-				'interval'       => $request->frequency->stripeInterval(),
-				'interval_count' => $request->frequency->stripeIntervalCount()
-			];
-		}
+		// Cart mode is one-time only; explicit line items override the single amount.
+		$recurring = $request->frequency->isRecurring() && !$request->hasLineItems();
 
 		$metadata = [];
 
@@ -96,18 +85,13 @@ class StripeGateway implements IPaymentGateway
 			$metadata[ (string) $key ] = is_scalar( $value ) ? (string) $value : '';
 		}
 
-		$metadata['frequency'] = $request->frequency->value;
+		$metadata['frequency'] = $recurring ? $request->frequency->value : Frequency::OneTime->value;
 
 		$params = [
 			'mode'        => $recurring ? 'subscription' : 'payment',
 			'success_url' => $request->successUrl,
 			'cancel_url'  => $request->cancelUrl,
-			'line_items'  => [
-				[
-					'price_data' => $priceData,
-					'quantity'   => 1
-				]
-			],
+			'line_items'  => $this->buildLineItems( $request, $recurring ),
 			'metadata'    => $metadata
 		];
 
@@ -123,6 +107,65 @@ class StripeGateway implements IPaymentGateway
 		}
 
 		return $params;
+	}
+
+	/**
+	 * Build the Stripe line_items array: either the explicit cart items or the
+	 * single amount-based item ( the original single-charge behavior ).
+	 *
+	 * @param CheckoutSessionRequest $request
+	 * @param bool $recurring
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function buildLineItems( CheckoutSessionRequest $request, bool $recurring ): array
+	{
+		if( $request->hasLineItems() )
+		{
+			$items = [];
+
+			foreach( $request->lineItems as $item )
+			{
+				if( !$item instanceof LineItem )
+				{
+					continue;
+				}
+
+				$items[] = [
+					'price_data' => [
+						'currency'     => $item->unitAmount->currency,
+						'unit_amount'  => $item->unitAmount->amount,
+						'product_data' => [ 'name' => $item->name ]
+					],
+					'quantity'   => max( 1, $item->quantity )
+				];
+			}
+
+			if( $items !== [] )
+			{
+				return $items;
+			}
+		}
+
+		$priceData = [
+			'currency'     => $request->amount->currency,
+			'unit_amount'  => $request->amount->amount,
+			'product_data' => [ 'name' => $request->productName ]
+		];
+
+		if( $recurring )
+		{
+			$priceData['recurring'] = [
+				'interval'       => $request->frequency->stripeInterval(),
+				'interval_count' => $request->frequency->stripeIntervalCount()
+			];
+		}
+
+		return [
+			[
+				'price_data' => $priceData,
+				'quantity'   => 1
+			]
+		];
 	}
 
 	/**
