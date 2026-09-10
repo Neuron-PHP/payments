@@ -62,7 +62,91 @@ class StripeGateway implements IPaymentGateway
 			throw new PaymentException( 'Stripe did not return a checkout URL.' );
 		}
 
-		return new CheckoutSession( (string) $session->id, (string) $url );
+		return $this->sessionFromStripe( $session );
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function getCheckoutSession( string $sessionId ): CheckoutSession
+	{
+		try
+		{
+			$session = $this->client()->checkout->sessions->retrieve( $sessionId );
+		}
+		catch( \Throwable $e )
+		{
+			throw new PaymentException( 'Unable to retrieve Stripe checkout session: ' . $e->getMessage(), 0, $e );
+		}
+
+		return $this->sessionFromStripe( $session );
+	}
+
+	/**
+	 * Map a Stripe Checkout Session ( SDK object or array ) to a CheckoutSession DTO.
+	 *
+	 * @param mixed $session
+	 * @return CheckoutSession
+	 */
+	public function sessionFromStripe( mixed $session ): CheckoutSession
+	{
+		$get = static function( string $key ) use ( $session )
+		{
+			if( is_array( $session ) )
+			{
+				return $session[ $key ] ?? null;
+			}
+
+			return $session->$key ?? null;
+		};
+
+		$metadata = $get( 'metadata' );
+
+		if( $metadata !== null && !is_array( $metadata ) && method_exists( $metadata, 'toArray' ) )
+		{
+			$metadata = $metadata->toArray();
+		}
+
+		return new CheckoutSession(
+			id:              (string) ( $get( 'id' ) ?? '' ),
+			url:             (string) ( $get( 'url' ) ?? '' ),
+			status:          (string) ( $get( 'status' ) ?? '' ),
+			paymentStatus:   (string) ( $get( 'payment_status' ) ?? '' ),
+			paymentIntentId: $this->idFrom( $get( 'payment_intent' ) ),
+			subscriptionId:  $this->idFrom( $get( 'subscription' ) ),
+			amountTotal:     $get( 'amount_total' ) === null ? null : (int) $get( 'amount_total' ),
+			metadata:        is_array( $metadata ) ? $metadata : []
+		);
+	}
+
+	/**
+	 * Normalize a Stripe id that may be a string or an expanded object.
+	 *
+	 * @param mixed $value
+	 * @return string|null
+	 */
+	private function idFrom( mixed $value ): ?string
+	{
+		if( is_string( $value ) && $value !== '' )
+		{
+			return $value;
+		}
+
+		if( is_object( $value ) )
+		{
+			$id = $value->id ?? null;
+
+			return is_string( $id ) && $id !== '' ? $id : null;
+		}
+
+		if( is_array( $value ) )
+		{
+			$id = $value['id'] ?? null;
+
+			return is_string( $id ) && $id !== '' ? $id : null;
+		}
+
+		return null;
 	}
 
 	/**

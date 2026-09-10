@@ -197,6 +197,39 @@ class StripeGatewayTest extends TestCase
 		$this->assertSame( '7', $subscription->metadata['payment_id'] );
 	}
 
+	public function testSessionFromStripeMapsPaidCheckout(): void
+	{
+		$session = $this->gateway()->sessionFromStripe( [
+			'id'              => 'cs_1',
+			'url'             => 'https://checkout.stripe.com/cs_1',
+			'status'          => 'complete',
+			'payment_status'  => 'paid',
+			'payment_intent'  => 'pi_1',
+			'subscription'    => null,
+			'amount_total'    => 2500,
+			'metadata'        => [ 'payment_id' => '9' ]
+		] );
+
+		$this->assertSame( 'cs_1', $session->id );
+		$this->assertTrue( $session->isPaid() );
+		$this->assertFalse( $session->isExpired() );
+		$this->assertSame( 'pi_1', $session->paymentIntentId );
+		$this->assertSame( 2500, $session->amountTotal );
+		$this->assertSame( '9', $session->metadata['payment_id'] );
+	}
+
+	public function testSessionFromStripeMapsExpiredCheckout(): void
+	{
+		$session = $this->gateway()->sessionFromStripe( [
+			'id'             => 'cs_2',
+			'status'         => 'expired',
+			'payment_status' => 'unpaid'
+		] );
+
+		$this->assertTrue( $session->isExpired() );
+		$this->assertFalse( $session->isPaid() );
+	}
+
 	public function testSubscriptionFromStripeMapsCanceled(): void
 	{
 		$subscription = $this->gateway()->subscriptionFromStripe( [
