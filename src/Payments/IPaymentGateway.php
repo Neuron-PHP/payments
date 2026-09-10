@@ -29,6 +29,18 @@ interface IPaymentGateway
 	public function createCheckoutSession( CheckoutSessionRequest $request ): CheckoutSession;
 
 	/**
+	 * Retrieve a previously created checkout session by its provider id.
+	 *
+	 * Used to reconcile a pending payment when the webhook is delayed or
+	 * missing ( thank-you page, admin sync, CLI ).
+	 *
+	 * @param string $sessionId
+	 * @return CheckoutSession
+	 * @throws PaymentException When the session cannot be retrieved.
+	 */
+	public function getCheckoutSession( string $sessionId ): CheckoutSession;
+
+	/**
 	 * Verify a webhook payload's signature and decode it into an event.
 	 *
 	 * @param string $payload Raw request body.
