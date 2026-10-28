@@ -3,6 +3,7 @@
 namespace Tests\Payments\Dto;
 
 use Neuron\Payments\Dto\Frequency;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class FrequencyTest extends TestCase
@@ -19,9 +20,7 @@ class FrequencyTest extends TestCase
 		$this->assertTrue( Frequency::Annual->isRecurring() );
 	}
 
-	/**
-	 * @dataProvider intervalProvider
-	 */
+	#[DataProvider( 'intervalProvider' )]
 	public function testStripeIntervalMapping( Frequency $frequency, ?string $interval, int $count ): void
 	{
 		$this->assertSame( $interval, $frequency->stripeInterval() );
