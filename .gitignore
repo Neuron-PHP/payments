@@ -14,5 +14,6 @@ composer.phar
 composer.lock
 
 tests/.phpunit.result.cache
+tests/.phpunit.cache
 coverage.xml
 coverage_*
